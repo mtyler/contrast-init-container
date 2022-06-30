@@ -1,7 +1,7 @@
 api:
   url: https://apptwo.contrastsecurity.com/Contrast
-  api_key: xxx
-  service_key: xxx
+  api_key: 9ztIt1L2sIyh2p1Lwa28U6ItWWaKjLOX
+  service_key: ERQ5YZ9OVQ6GQC21
   user_name: michael.tyler@contrastsecurity.com
 server:
   name: aks-springboot
