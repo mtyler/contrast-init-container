@@ -1,0 +1,118 @@
+# Starter pipeline
+
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+stages:
+- stage: Build
+  jobs:
+  - job: build
+    pool:
+      vmImage: ubuntu-latest
+
+    steps:
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'SpringBoot/pom.xml'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        javaHomeOption: 'JDKVersion'
+        mavenVersionOption: 'Default'
+        mavenAuthenticateFeed: false
+        effectivePomSkip: false
+        sonarQubeRunAnalysis: false
+
+# TODO: Make container Repository dynamic
+    - task: Docker@2
+      inputs:
+        containerRegistry: 'DockerHub-mtyler'
+        repository: 'mtyler/springboot'
+        command: 'buildAndPush'
+        Dockerfile: '**/Dockerfile'
+        tags: |
+          $(Build.BuildId)
+          latest
+
+- stage: Deploy
+  displayName: Deploy to development cluster
+  dependsOn: Build
+  jobs:
+  - job: deploy
+    displayName: deploy to AKS
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+# TODO check namespaces for a buildId or check for running service 'springboot' and fail gracefully
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Kubernetes Service Connection'
+        kubernetesServiceEndpoint: 'aks-service-connection'
+        command: 'create'
+        arguments: 'namespace $(Build.BuildId)'
+
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Kubernetes Service Connection'
+        kubernetesServiceEndpoint: 'aks-service-connection'
+        namespace: $(Build.BuildId)
+        command: 'apply'
+        arguments: '-k ./Manifests/base'
+        secretType: 'dockerRegistry'
+        containerRegistryType: 'Azure Container Registry'
+
+    - task: Kubernetes@1
+      inputs:
+        connectionType: 'Kubernetes Service Connection'
+        kubernetesServiceEndpoint: 'aks-service-connection'
+        namespace: $(Build.BuildId)
+        command: 'apply'
+        arguments: '-k ./Manifests/overlays/contrast'
+        secretType: 'dockerRegistry'
+        containerRegistryType: 'Azure Container Registry'
+
+- stage: Test
+  displayName: Run tests and teardown
+  dependsOn: Deploy
+  jobs:
+  - job: test
+    displayName: test deployment
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: Kubernetes@1
+      displayName: 'Kubernetes Login'
+      inputs:
+        connectionType: 'Kubernetes Service Connection'
+        kubernetesServiceEndpoint: 'aks-service-connection'
+        command: 'login'
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          SB_IP=`kubectl get service springboot -n $(Build.BuildId) -o=jsonpath='{.status.loadBalancer.ingress[0].ip}'`
+          ./Test/attack0.sh $SB_IP $(Build.BuildId)
+        workingDirectory: '.'
+
+- stage: Report
+  displayName: evaluate tests
+  dependsOn: Test
+  jobs:
+  - job: agentless
+    pool: server
+    steps:
+
+    - task: ContrastIntegration@2
+      inputs:
+        ContrastService: 'contrast_service'
+        Application: 'd67d0129-1407-4b98-aeea-53654b70af96'
+        StatusFilter: 'Reported'
+        CriticalLimit: '5'
+        HighLimit: '5'
+        MediumLimit: '5'
+        LowLimit: '5'
+        NoteLimit: '5'

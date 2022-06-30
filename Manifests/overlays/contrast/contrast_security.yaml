@@ -1,0 +1,16 @@
+api:
+  url: https://apptwo.contrastsecurity.com/Contrast
+  api_key: xxx
+  service_key: xxx
+  user_name: michael.tyler@contrastsecurity.com
+server:
+  name: aks-springboot
+
+# Use Azure Devops Variables
+# These are set in the Azure DevOps gui or cli and references with $()
+#  url: $(CONTRAST_URL)
+#  api_key: $(CONTRAST_API_KEY)
+#  service_key: $(CONTRAST_SERVICE_KEY)
+#  user_name: $(CONTRAST_USER_NAME)
+#server:
+#  name: $(CONTRAST_SERVER_NAME)
